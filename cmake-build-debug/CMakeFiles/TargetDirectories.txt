@@ -1,0 +1,3 @@
+C:/Users/pozzi/Desktop/project/qnetworkc++/cmake-build-debug/CMakeFiles/qnetworkc__.dir
+C:/Users/pozzi/Desktop/project/qnetworkc++/cmake-build-debug/CMakeFiles/edit_cache.dir
+C:/Users/pozzi/Desktop/project/qnetworkc++/cmake-build-debug/CMakeFiles/rebuild_cache.dir
