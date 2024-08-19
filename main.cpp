@@ -15,11 +15,13 @@ struct Connection {
     std::string localAddress;
     std::string foreignAddress;
     std::string state;
+    std::string protocol;
 
     bool operator==(const Connection& other) const {
         return localAddress == other.localAddress &&
                foreignAddress == other.foreignAddress &&
-               state == other.state;
+               state == other.state &&
+               protocol == other.protocol;
     }
 };
 
@@ -47,6 +49,19 @@ std::string stateToString(DWORD state) {
     }
 }
 
+std::string protocolToString(const std::string& foreignAddress) {
+    size_t colonPos = foreignAddress.find(':');
+    if (colonPos != std::string::npos) {
+        int port = std::stoi(foreignAddress.substr(colonPos + 1));
+        switch (port) {
+            case 80: return "HTTP";
+            case 443: return "HTTPS";
+            default: return "TCP"; // По умолчанию TCP
+        }
+    }
+    return "TCP";
+}
+
 std::vector<Connection> getNetworkConnections() {
     std::vector<Connection> connections;
     PMIB_TCPTABLE tcpTable;
@@ -63,6 +78,7 @@ std::vector<Connection> getNetworkConnections() {
             conn.localAddress = ipToString(row.dwLocalAddr) + ":" + std::to_string(ntohs((u_short)row.dwLocalPort));
             conn.foreignAddress = ipToString(row.dwRemoteAddr) + ":" + std::to_string(ntohs((u_short)row.dwRemotePort));
             conn.state = stateToString(row.dwState);
+            conn.protocol = protocolToString(conn.foreignAddress);
             connections.push_back(conn);
         }
     }
@@ -73,6 +89,7 @@ std::vector<Connection> getNetworkConnections() {
 void displayConnections(const std::vector<Connection>& connections) {
     for (const auto& conn : connections) {
         std::cout << "Index: " << conn.index << std::endl;
+        std::cout << "Protocol: " << conn.protocol << std::endl;
         std::cout << "Local Address: " << conn.localAddress << std::endl;
         std::cout << "Foreign Address: " << conn.foreignAddress << std::endl;
         std::cout << "State: " << conn.state << std::endl;
@@ -109,19 +126,19 @@ void monitorConnections() {
 
         // Поиск новых подключений
         for (const auto& currConn : currentConnections) {
-            if (std::find(previousConnections.begin(), previousConnections.end(), currConn) == currentConnections.end()) {
+            if (std::find(previousConnections.begin(), previousConnections.end(), currConn) == previousConnections.end()) {
                 newConnections.push_back(currConn);
             }
         }
 
         // Вывод сообщений о пропавших соединениях
         for (const auto& removedConn : removedConnections) {
-            std::cout << "Connection removed: " << removedConn.localAddress << " -> " << removedConn.foreignAddress << std::endl;
+            std::cout << "Connection removed: " << removedConn.localAddress << " -> " << removedConn.foreignAddress << " (" << removedConn.protocol << ")" << std::endl;
         }
 
         // Вывод сообщений о новых соединениях
         for (const auto& newConn : newConnections) {
-            std::cout << "New connection: " << newConn.localAddress << " -> " << newConn.foreignAddress << std::endl;
+            std::cout << "New connection: " << newConn.localAddress << " -> " << newConn.foreignAddress << " (" << newConn.protocol << ")" << std::endl;
         }
 
         // Сохраняем текущие подключения для следующей итерации
