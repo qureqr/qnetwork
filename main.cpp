@@ -81,11 +81,7 @@ void displayConnections(const std::vector<Connection>& connections) {
 }
 
 void clearConsole() {
-#ifdef _WIN32
-    system("cls");
-#else
-    system("clear");
-#endif
+    std::cout << std::string(100, '\n'); // Заполнение консоли пустыми строками
 }
 
 void monitorConnections() {
@@ -113,7 +109,7 @@ void monitorConnections() {
 
         // Поиск новых подключений
         for (const auto& currConn : currentConnections) {
-            if (std::find(previousConnections.begin(), previousConnections.end(), currConn) == previousConnections.end()) {
+            if (std::find(previousConnections.begin(), previousConnections.end(), currConn) == currentConnections.end()) {
                 newConnections.push_back(currConn);
             }
         }
