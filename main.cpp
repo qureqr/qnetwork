@@ -80,30 +80,52 @@ void displayConnections(const std::vector<Connection>& connections) {
     }
 }
 
+void clearConsole() {
+#ifdef _WIN32
+    system("cls");
+#else
+    system("clear");
+#endif
+}
+
 void monitorConnections() {
     std::vector<Connection> previousConnections;
 
     while (true) {
+        clearConsole();
         auto currentConnections = getNetworkConnections();
-
-        // Очищаем консоль
-        system("cls");
 
         std::cout << "Updated Connections:" << std::endl;
         displayConnections(currentConnections);
 
+        std::cout << "-----------------------------------" << std::endl;
+
+        // Вывод информации о новых и удаленных подключениях в конце
+        std::vector<Connection> removedConnections;
+        std::vector<Connection> newConnections;
+
         // Поиск исчезнувших подключений
         for (const auto& prevConn : previousConnections) {
             if (std::find(currentConnections.begin(), currentConnections.end(), prevConn) == currentConnections.end()) {
-                std::cout << "Connection removed: " << prevConn.localAddress << " -> " << prevConn.foreignAddress << std::endl;
+                removedConnections.push_back(prevConn);
             }
         }
 
         // Поиск новых подключений
         for (const auto& currConn : currentConnections) {
             if (std::find(previousConnections.begin(), previousConnections.end(), currConn) == previousConnections.end()) {
-                std::cout << "New connection: " << currConn.localAddress << " -> " << currConn.foreignAddress << std::endl;
+                newConnections.push_back(currConn);
             }
+        }
+
+        // Вывод сообщений о пропавших соединениях
+        for (const auto& removedConn : removedConnections) {
+            std::cout << "Connection removed: " << removedConn.localAddress << " -> " << removedConn.foreignAddress << std::endl;
+        }
+
+        // Вывод сообщений о новых соединениях
+        for (const auto& newConn : newConnections) {
+            std::cout << "New connection: " << newConn.localAddress << " -> " << newConn.foreignAddress << std::endl;
         }
 
         // Сохраняем текущие подключения для следующей итерации
