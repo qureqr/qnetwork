@@ -49,20 +49,22 @@ std::string stateToString(DWORD state) {
     }
 }
 
-std::string protocolToString(const std::string& foreignAddress) {
+std::string protocolToString(const std::string& foreignAddress, const std::string& protocol) {
     size_t colonPos = foreignAddress.find(':');
     if (colonPos != std::string::npos) {
         int port = std::stoi(foreignAddress.substr(colonPos + 1));
-        switch (port) {
-            case 80: return "HTTP";
-            case 443: return "HTTPS";
-            default: return "TCP"; // По умолчанию TCP
+        if (protocol == "TCP") {
+            switch (port) {
+                case 80: return "HTTP";
+                case 443: return "HTTPS";
+                default: return "TCP";
+            }
         }
     }
-    return "TCP";
+    return protocol; // Возвращаем "TCP" или "UDP"
 }
 
-std::vector<Connection> getNetworkConnections() {
+std::vector<Connection> getTcpConnections() {
     std::vector<Connection> connections;
     PMIB_TCPTABLE tcpTable;
     DWORD size = 0;
@@ -78,11 +80,46 @@ std::vector<Connection> getNetworkConnections() {
             conn.localAddress = ipToString(row.dwLocalAddr) + ":" + std::to_string(ntohs((u_short)row.dwLocalPort));
             conn.foreignAddress = ipToString(row.dwRemoteAddr) + ":" + std::to_string(ntohs((u_short)row.dwRemotePort));
             conn.state = stateToString(row.dwState);
-            conn.protocol = protocolToString(conn.foreignAddress);
+            conn.protocol = protocolToString(conn.foreignAddress, "TCP");
             connections.push_back(conn);
         }
     }
     free(tcpTable);
+    return connections;
+}
+
+std::vector<Connection> getUdpConnections() {
+    std::vector<Connection> connections;
+    PMIB_UDPTABLE udpTable;
+    DWORD size = 0;
+
+    GetUdpTable(NULL, &size, TRUE);
+    udpTable = (MIB_UDPTABLE*)malloc(size);
+
+    if (GetUdpTable(udpTable, &size, TRUE) == NO_ERROR) {
+        for (DWORD i = 0; i < udpTable->dwNumEntries; i++) {
+            MIB_UDPROW row = udpTable->table[i];
+            Connection conn;
+            conn.index = i + 1;
+            conn.localAddress = ipToString(row.dwLocalAddr) + ":" + std::to_string(ntohs((u_short)row.dwLocalPort));
+            conn.foreignAddress = "0.0.0.0:0"; // Для UDP соединений удаленный адрес неизвестен
+            conn.state = "N/A";
+            conn.protocol = "UDP";
+            connections.push_back(conn);
+        }
+    }
+    free(udpTable);
+    return connections;
+}
+
+std::vector<Connection> getNetworkConnections() {
+    std::vector<Connection> connections;
+    auto tcpConnections = getTcpConnections();
+    auto udpConnections = getUdpConnections();
+
+    connections.insert(connections.end(), tcpConnections.begin(), tcpConnections.end());
+    connections.insert(connections.end(), udpConnections.begin(), udpConnections.end());
+
     return connections;
 }
 
