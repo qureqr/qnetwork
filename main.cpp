@@ -186,43 +186,28 @@ void clearConsole() {
 void monitorConnections() {
     std::vector<Connection> previousConnections;
 
+    std::thread userInputThread(handleUserInput, std::ref(previousConnections));  // Поток для обработки команд
+
     while (true) {
         clearConsole();
         auto currentConnections = getNetworkConnections();
+
+        {
+            std::lock_guard<std::mutex> lock(connectionMutex);  // Блокируем мьютекс для безопасного доступа
+            previousConnections = currentConnections;  // Обновляем текущие соединения для пользователя
+        }
 
         std::cout << "Updated Connections:" << std::endl;
         displayConnections(currentConnections);
 
         std::cout << "-----------------------------------" << std::endl;
 
-        std::vector<Connection> removedConnections;
-        std::vector<Connection> newConnections;
-
-        for (const auto& prevConn : previousConnections) {
-            if (std::find(currentConnections.begin(), currentConnections.end(), prevConn) == currentConnections.end()) {
-                removedConnections.push_back(prevConn);
-            }
-        }
-
-        for (const auto& currConn : currentConnections) {
-            if (std::find(previousConnections.begin(), previousConnections.end(), currConn) == previousConnections.end()) {
-                newConnections.push_back(currConn);
-            }
-        }
-
-        for (const auto& removedConn : removedConnections) {
-            std::cout << "Connection removed: " << removedConn.localAddress << " -> " << removedConn.foreignAddress << " (" << removedConn.protocol << ")" << std::endl;
-        }
-
-        for (const auto& newConn : newConnections) {
-            std::cout << "New connection: " << newConn.localAddress << " -> " << newConn.foreignAddress << " (" << newConn.protocol << ")" << std::endl;
-        }
-
-        previousConnections = currentConnections;
-
-        std::this_thread::sleep_for(std::chrono::seconds(5));
+        std::this_thread::sleep_for(std::chrono::seconds(5)); // Обновление каждые 5 секунд
     }
+
+    userInputThread.join();  // Ждем завершения потока ввода команд
 }
+
 
 int main() {
     monitorConnections();
