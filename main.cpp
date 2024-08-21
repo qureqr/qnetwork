@@ -6,6 +6,7 @@
 #include <thread>
 #include <chrono>
 #include <algorithm>
+#include <mutex>
 
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "iphlpapi.lib")
@@ -30,6 +31,50 @@ std::string ipToString(DWORD ip) {
     inAddr.S_un.S_addr = ip;
     return std::string(inet_ntoa(inAddr)); // Возвращаем std::string
 }
+std::mutex connectionMutex;
+
+void closeConnectionByIndex(int index, std::vector<Connection>& connections) {
+    std::lock_guard<std::mutex> lock(connectionMutex);  // Блокируем мьютекс
+
+    if (index > 0 && index <= connections.size()) {
+        Connection conn = connections[index - 1];
+
+        if (conn.protocol == "TCP") {
+            MIB_TCPROW row;
+            row.dwLocalAddr = inet_addr(conn.localAddress.substr(0, conn.localAddress.find(':')).c_str());
+            row.dwLocalPort = htons(std::stoi(conn.localAddress.substr(conn.localAddress.find(':') + 1)));
+            row.dwRemoteAddr = inet_addr(conn.foreignAddress.substr(0, conn.foreignAddress.find(':')).c_str());
+            row.dwRemotePort = htons(std::stoi(conn.foreignAddress.substr(conn.foreignAddress.find(':') + 1)));
+            row.dwState = MIB_TCP_STATE_DELETE_TCB;  // Устанавливаем состояние в DELETE_TCB для закрытия
+
+            if (SetTcpEntry(&row) == NO_ERROR) {
+                std::cout << "Connection with index " << index << " closed successfully." << std::endl;
+            } else {
+                std::cout << "Failed to close connection with index " << index << "." << std::endl;
+            }
+        } else {
+            std::cout << "UDP connections cannot be closed programmatically." << std::endl;
+        }
+    } else {
+        std::cout << "Invalid index." << std::endl;
+    }
+}
+
+void handleUserInput(std::vector<Connection>& connections) {
+    while (true) {
+        std::string input;
+        std::cout << "Enter command: ";
+        std::getline(std::cin, input);
+
+        if (input.rfind("close", 0) == 0) {
+            int index = std::stoi(input.substr(6)); // Предполагаем, что формат команды "close N"
+            closeConnectionByIndex(index, connections);
+        } else {
+            std::cout << "Unknown command." << std::endl;
+        }
+    }
+}
+
 
 std::string stateToString(DWORD state) {
     switch (state) {
