@@ -6,7 +6,6 @@
 #include <thread>
 #include <chrono>
 #include <algorithm>
-#include <mutex>
 
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "iphlpapi.lib")
@@ -29,52 +28,8 @@ struct Connection {
 std::string ipToString(DWORD ip) {
     in_addr inAddr;
     inAddr.S_un.S_addr = ip;
-    return std::string(inet_ntoa(inAddr)); // Возвращаем std::string
+    return inet_ntoa(inAddr);
 }
-std::mutex connectionMutex;
-
-void closeConnectionByIndex(int index, std::vector<Connection>& connections) {
-    std::lock_guard<std::mutex> lock(connectionMutex);  // Блокируем мьютекс
-
-    if (index > 0 && index <= connections.size()) {
-        Connection conn = connections[index - 1];
-
-        if (conn.protocol == "TCP") {
-            MIB_TCPROW row;
-            row.dwLocalAddr = inet_addr(conn.localAddress.substr(0, conn.localAddress.find(':')).c_str());
-            row.dwLocalPort = htons(std::stoi(conn.localAddress.substr(conn.localAddress.find(':') + 1)));
-            row.dwRemoteAddr = inet_addr(conn.foreignAddress.substr(0, conn.foreignAddress.find(':')).c_str());
-            row.dwRemotePort = htons(std::stoi(conn.foreignAddress.substr(conn.foreignAddress.find(':') + 1)));
-            row.dwState = MIB_TCP_STATE_DELETE_TCB;  // Устанавливаем состояние в DELETE_TCB для закрытия
-
-            if (SetTcpEntry(&row) == NO_ERROR) {
-                std::cout << "Connection with index " << index << " closed successfully." << std::endl;
-            } else {
-                std::cout << "Failed to close connection with index " << index << "." << std::endl;
-            }
-        } else {
-            std::cout << "UDP connections cannot be closed programmatically." << std::endl;
-        }
-    } else {
-        std::cout << "Invalid index." << std::endl;
-    }
-}
-
-void handleUserInput(std::vector<Connection>& connections) {
-    while (true) {
-        std::string input;
-        std::cout << "Enter command: ";
-        std::getline(std::cin, input);
-
-        if (input.rfind("close", 0) == 0) {
-            int index = std::stoi(input.substr(6)); // Предполагаем, что формат команды "close N"
-            closeConnectionByIndex(index, connections);
-        } else {
-            std::cout << "Unknown command." << std::endl;
-        }
-    }
-}
-
 
 std::string stateToString(DWORD state) {
     switch (state) {
@@ -106,7 +61,7 @@ std::string protocolToString(const std::string& foreignAddress, const std::strin
             }
         }
     }
-    return protocol;
+    return protocol; // Возвращаем "TCP" или "UDP"
 }
 
 std::vector<Connection> getTcpConnections() {
@@ -180,34 +135,55 @@ void displayConnections(const std::vector<Connection>& connections) {
 }
 
 void clearConsole() {
-    std::cout << std::string(100, '\n');
+    std::cout << std::string(100, '\n'); // Заполнение консоли пустыми строками
 }
 
 void monitorConnections() {
     std::vector<Connection> previousConnections;
 
-    std::thread userInputThread(handleUserInput, std::ref(previousConnections));  // Поток для обработки команд
-
     while (true) {
         clearConsole();
         auto currentConnections = getNetworkConnections();
-
-        {
-            std::lock_guard<std::mutex> lock(connectionMutex);  // Блокируем мьютекс для безопасного доступа
-            previousConnections = currentConnections;  // Обновляем текущие соединения для пользователя
-        }
 
         std::cout << "Updated Connections:" << std::endl;
         displayConnections(currentConnections);
 
         std::cout << "-----------------------------------" << std::endl;
 
+        // Вывод информации о новых и удаленных подключениях в конце
+        std::vector<Connection> removedConnections;
+        std::vector<Connection> newConnections;
+
+        // Поиск исчезнувших подключений
+        for (const auto& prevConn : previousConnections) {
+            if (std::find(currentConnections.begin(), currentConnections.end(), prevConn) == currentConnections.end()) {
+                removedConnections.push_back(prevConn);
+            }
+        }
+
+        // Поиск новых подключений
+        for (const auto& currConn : currentConnections) {
+            if (std::find(previousConnections.begin(), previousConnections.end(), currConn) == previousConnections.end()) {
+                newConnections.push_back(currConn);
+            }
+        }
+
+        // Вывод сообщений о пропавших соединениях
+        for (const auto& removedConn : removedConnections) {
+            std::cout << "Connection removed: " << removedConn.localAddress << " -> " << removedConn.foreignAddress << " (" << removedConn.protocol << ")" << std::endl;
+        }
+
+        // Вывод сообщений о новых соединениях
+        for (const auto& newConn : newConnections) {
+            std::cout << "New connection: " << newConn.localAddress << " -> " << newConn.foreignAddress << " (" << newConn.protocol << ")" << std::endl;
+        }
+
+        // Сохраняем текущие подключения для следующей итерации
+        previousConnections = currentConnections;
+
         std::this_thread::sleep_for(std::chrono::seconds(5)); // Обновление каждые 5 секунд
     }
-
-    userInputThread.join();  // Ждем завершения потока ввода команд
 }
-
 
 int main() {
     monitorConnections();
